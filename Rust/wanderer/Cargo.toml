@@ -11,3 +11,4 @@ reqwest = { version = "0.10", features = ["json"] }
 rpassword = "4.0.3"
 serde = { version = "1.0", features = ["derive"] }
 tokio = { version = "0.2", features = ["full"] }
+uuid = { version = "0.8", features = ["v4"] }
