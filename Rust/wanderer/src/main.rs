@@ -1,12 +1,20 @@
 use reqwest::RequestBuilder;
 use reqwest::Response;
 use reqwest::Result;
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::io;
 
 extern crate rpassword;
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+
+#[derive(Deserialize)]
+struct TokenResponse {
+    token: String,
+    expires: i64,
+    ssl: bool,
+}
 
 async fn login(username: String, password: String) -> Result<Response> {
     let mut params = HashMap::new();
@@ -37,10 +45,11 @@ async fn main() {
     match login_result {
         Ok(response) => {
             println!("got a response");
-            let text_result: Result<String> = response.text().await;
-            match text_result {
-                Ok(text) => {
-                    println!("In JSON, it's this: {}", text);
+            //let text_result: Result<String> = response.text().await;
+            let json_result: Result<TokenResponse> = response.json().await;
+            match json_result {
+                Ok(json) => {
+                    println!("In JSON, it's this: {}", json.token);
                 },
                 Err(err) => println!("error here: {:?}", err),
             }
