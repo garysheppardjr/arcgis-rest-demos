@@ -1,3 +1,4 @@
+use reqwest::RequestBuilder;
 use reqwest::Response;
 use reqwest::Result;
 use std::collections::HashMap;
@@ -8,10 +9,17 @@ extern crate rpassword;
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 async fn login(username: String, password: String) -> Result<Response> {
-    println!("This is login; username is {}", username);
+    let mut params = HashMap::new();
+    params.insert("username", username);
+    params.insert("password", password);
+    params.insert("referer", "Wanderer app".to_string());
+    params.insert("f", "json".to_string());
+
     let client = reqwest::Client::new();
-    // TODO do the actual login using client.post, instead of this demo
-    reqwest::get("https://httpbin.org/ip").await
+    client.post("https://www.arcgis.com/sharing/rest/generateToken")
+        .form(&params)
+        .send()
+        .await
 }
 
 #[tokio::main]
@@ -23,13 +31,14 @@ async fn main() {
         .expect("Failed to read line");
     username = username.trim().to_string();
     let password = rpassword::read_password_from_tty(Some("Password: ")).unwrap();
+
     println!("Logging in as {}...", username);
-    
-    let foo = login(username, password).await;
-    match foo {
+    let login_result = login(username, password).await;
+    match login_result {
         Ok(response) => {
             println!("got a response");
-            match response.text().await {
+            let text_result: Result<String> = response.text().await;
+            match text_result {
                 Ok(text) => {
                     println!("In JSON, it's this: {}", text);
                 },
