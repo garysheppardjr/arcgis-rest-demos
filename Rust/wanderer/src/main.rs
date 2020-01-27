@@ -31,6 +31,10 @@ async fn login(username: String, password: String, referrer: String) -> Result<R
         .await
 }
 
+fn play_game(token: String, city_count: u32) {
+    println!("Let's play Wanderer with up to {} cities and token {}", city_count, token);
+}
+
 #[tokio::main]
 async fn main() {
     let referrer = format!("Referrer {}", Uuid::new_v4());
@@ -46,17 +50,35 @@ async fn main() {
     let login_result = login(username, password, referrer).await;
     match login_result {
         Ok(response) => {
-            println!("got a response");
-            //let text_result: Result<String> = response.text().await;
             let json_result: Result<TokenResponse> = response.json().await;
             match json_result {
                 Ok(json) => {
-                    println!("In JSON, it's this: {}", json.token);
+                    println!("Level of difficulty (0 = easy, 1 = medium, 2 = hard, 3 = legendary):");
+                    let mut difficulty = String::new();
+                    io::stdin().read_line(&mut difficulty)
+                        .expect("Failed to read line");
+                    let difficulty: u32 = match difficulty.trim().parse() {
+                        Ok(num) => num,
+                        Err(_) => {
+                            println!("Okay, then you get the default of 0 = easy.");
+                            0
+                        },
+                    };
+                    let city_count: u32 = match difficulty {
+                        0 => 10,
+                        1 => 100,
+                        2 => 1000,
+                        3 => std::u32::MAX,
+                        _ => {
+                            println!("Okay, then you get the default of 0 = easy.");
+                            10
+                        },
+                    };
+                    play_game(json.token, city_count);
                 },
                 Err(err) => println!("error here: {:?}", err),
             }
         },
         Err(err) => println!("error parsing response: {:?}", err),
     }
-    println!("Looks like we made it!");
 }
