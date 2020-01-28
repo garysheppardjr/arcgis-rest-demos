@@ -17,22 +17,67 @@ struct TokenResponse {
     ssl: bool,
 }
 
-async fn login(username: String, password: String, referrer: String) -> Result<Response> {
+#[derive(Deserialize)]
+struct Service {
+    url: String,
+}
+
+#[derive(Deserialize)]
+struct HelperServices {
+    analysis: Service,
+}
+
+#[derive(Deserialize)]
+struct PortalSelfResponse {
+    #[serde(rename = "helperServices")]
+    helper_services: HelperServices,
+}
+
+async fn login(client: &reqwest::Client, username: &String, password: &String, referrer: &String) -> Result<Response> {
     let mut params = HashMap::new();
+    let f_json = String::from("json");
     params.insert("username", username);
     params.insert("password", password);
     params.insert("referer", referrer);
-    params.insert("f", "json".to_string());
+    params.insert("f", &f_json);
 
-    let client = reqwest::Client::new();
     client.post("https://www.arcgis.com/sharing/rest/generateToken")
         .form(&params)
         .send()
         .await
 }
 
-fn play_game(token: String, city_count: u32) {
-    println!("Let's play Wanderer with up to {} cities and token {}", city_count, token);
+async fn get_portal_self(client: &reqwest::Client, token: &String, referrer: &String) -> Result<PortalSelfResponse> {
+    let f_json = String::from("json");
+    let mut result: Result<Response> = client.get("https://www.arcgis.com/sharing/rest/portals/self")
+        .query(&[
+            ("token", token),
+            ("referer", referrer),
+            ("f", &f_json),
+        ])
+        .send()
+        .await;
+    match result {
+        Ok(response) => {
+            response.json().await
+        },
+        Err(err) => {
+            println!("Couldn't get portal self: {:?}", err);
+            Err(err)
+        },
+    }
+}
+
+async fn play_game(client: &reqwest::Client, token: &String, referrer: &String, city_count: u32) {
+    println!("Let's play Wanderer with up to {} cities", city_count);
+    // We need the analysis URL
+    let self_response: Result<PortalSelfResponse> = get_portal_self(client, token, referrer).await;
+    match self_response {
+        Ok(portal_self) => {
+            println!("Analysis URL is {}", portal_self.helper_services.analysis.url);
+        },
+        Err(err) => println!("Error response for self: {:?}", err),
+    }
 }
 
 #[tokio::main]
@@ -43,11 +88,11 @@ async fn main() {
     let mut username = String::new();
     io::stdin().read_line(&mut username)
         .expect("Failed to read line");
-    username = username.trim().to_string();
+    username = String::from(username.trim());
     let password = rpassword::read_password_from_tty(Some("Password: ")).unwrap();
 
-    println!("Logging in as {}...", username);
-    let login_result = login(username, password, referrer).await;
+    let reqwest_client = reqwest::Client::new();
+    let login_result = login(&reqwest_client, &username, &password, &referrer).await;
     match login_result {
         Ok(response) => {
             let json_result: Result<TokenResponse> = response.json().await;
@@ -74,7 +119,7 @@ async fn main() {
                             10
                         },
                     };
-                    play_game(json.token, city_count);
+                    play_game(&reqwest_client, &json.token, &referrer, city_count).await;
                 },
                 Err(err) => println!("error here: {:?}", err),
             }
