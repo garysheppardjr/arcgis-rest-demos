@@ -289,36 +289,25 @@ async fn get_random_city_pair(client: &reqwest::Client, token: &String, referrer
     }
 }
 
+fn point_geometry(x: f32, y: f32) -> json::JsonValue {
+    let mut data = json::JsonValue::new_object();
+    data["geometryType"] = "esriGeometryPoint".into();
+    data["geometry"] = json::JsonValue::new_object().into();
+    data["geometry"]["x"] = x.into();
+    data["geometry"]["y"] = y.into();
+    data
+}
+
 async fn get_distance(client: &reqwest::Client, token: &String, referrer: &String, portal_self: &PortalSelf, cities: &(&City, &City)) -> f32 {
-    println!("Geometry URL is {}", &portal_self.helper_services.geometry.url);
     let f_json = String::from("json");
     let mut result: Result<Response> = client.get(format!("{}/distance", &portal_self.helper_services.geometry.url).as_str())
-    // let mut result: Result<Response> = client.get(format!("{}/distance", FEATURE_LAYER_URL).as_str())
         .query(&[
-            ("geometry1", r#"
-                {
-                  "geometryType" : "esriGeometryPoint",
-                  "geometry" : 
-                  {
-                    "x" : -118.15, "y" : 33.80
-                  }
-                }
-            "#),
-            ("geometry2", r#"
-                {
-                  "geometryType" : "esriGeometryPoint",
-                  "geometry" : 
-                  {
-                    "x" : -118.15, "y" : 33.90
-                  }
-                }
-            "#),
+            ("geometry1", point_geometry(cities.0.lng, cities.0.lat).dump().as_str()),
+            ("geometry2", point_geometry(cities.1.lng, cities.1.lat).dump().as_str()),
             ("sr", "4326"),
             ("distanceUnit", "9036"), // esriSRUnit_Kilometer
             ("geodesic", "true"),
-            //("token", token),
-            //("referer", referrer),
-            ("f", &f_json),
+            ("f", "json"),
         ])
         .send()
         .await;
@@ -327,7 +316,6 @@ async fn get_distance(client: &reqwest::Client, token: &String, referrer: &Strin
             let response_result: Result<String> = response.text().await;
             match response_result {
                 Ok(response_string) => {
-                println!("The response: {}", &response_string);
                     match json::parse(response_string.as_str())
                         .unwrap()["distance"].as_f32() {
                         Some(distance) => distance,
