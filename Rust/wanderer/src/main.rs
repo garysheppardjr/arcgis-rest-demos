@@ -377,7 +377,101 @@ async fn play_game(client: &reqwest::Client, token: &String, referrer: &String, 
                 let cmd = cmd.as_str();
                 match cmd {
                     "n" | "s" | "e" | "w" => {
-                        println!("So you want to move {}", cmd);
+                        println!("You decide to travel {}.", cmd);
+                        
+                        let mut extent = json::JsonValue::new_object();
+                        extent["spatialReference"] = json::JsonValue::new_object().into();
+                        extent["spatialReference"]["wkid"] = 4326.into();
+                        match cmd {
+                            "n" => {
+                                extent["xmin"] = (-179.99999).into();
+                                extent["ymin"] = current_city.lat.into();
+                                extent["xmax"] = (179.99999).into();
+                                extent["ymax"] = (89.99999).into();
+                            },
+                            "s" => {
+                                extent["xmin"] = (-179.99999).into();
+                                extent["ymin"] = (-89.99999).into();
+                                extent["xmax"] = (179.99999).into();
+                                extent["ymax"] = current_city.lat.into();
+                            },
+                            "e" => {
+                                extent["xmin"] = current_city.lng.into();
+                                extent["ymin"] = (-89.99999).into();
+                                extent["xmax"] = (179.99999).into();
+                                extent["ymax"] = (89.99999).into();
+                            },
+                            "w" => {
+                                extent["xmin"] = (-179.99999).into();
+                                extent["ymin"] = (-89.99999).into();
+                                extent["xmax"] = current_city.lng.into();
+                                extent["ymax"] = (89.99999).into();
+                            },
+                            _ => {},
+                        };
+                        let mut out_sr = json::JsonValue::new_object();
+                        out_sr["wkid"] = 4326.into();
+                        let mut context = json::JsonValue::new_object();
+                        context["extent"] = extent.into();
+                        context["outSR"] = out_sr.into();
+                        
+                        let mut analysis_layer = json::JsonValue::new_object();
+                        analysis_layer["url"] = FEATURE_LAYER_URL.into();
+                        analysis_layer["filter"] = format!("population >= {}", minimum_population).into();
+                        let mut near_layer = json::JsonValue::new_object();
+                        near_layer["url"] = FEATURE_LAYER_URL.into();
+                        near_layer["filter"] = format!("FID = {}", current_city.fid).into();
+                        println!("Posting request to {}", &portal_self.helper_services.analysis.url);
+                        println!("Token is {}", token);
+                        let mut result: Result<Response> = client.post(format!("{}/FindNearest/submitJob", &portal_self.helper_services.analysis.url).as_str())
+                            .form(&[
+                                ("analysisLayer", analysis_layer.dump().as_str()),
+                                ("nearLayer", near_layer.dump().as_str()),
+                                ("measurementType", "StraightLine"),
+                                ("maxCount", "1"),
+                                ("context", context.dump().as_str()),
+                                ("token", token),
+                                ("referer", referrer),
+                                ("f", "json"),
+                            ])
+                            .send()
+                            .await;
+                        match result {
+                            Ok(response) => {
+                                let response_result: Result<String> = response.text().await;
+                                match response_result {
+                                    Ok(response_string) => {
+                                        let response_json = json::parse(response_string.as_str()).unwrap();
+                                        println!("Job ID is {}", response_json["jobId"]);
+                                        println!("Job status is {}", response_json["jobStatus"]);
+                                        let mut status = response_json["jobStatus"].as_str().unwrap();
+                                        loop {
+                                            match status {
+                                                "esriJobSucceeded" => {
+                                                    println!("Yay! It worked! We get to keep playing! TODO move current_city");
+                                                    break;
+                                                },
+                                                "esriJobFailed" | "esriJobTimedOut" | "esriJobCancelled" => {
+                                                    println!("Could not move to a city at this time.");
+                                                    break;
+                                                },
+                                                _ => {
+                                                    println!("Sit tight...{}", status);
+                                                    println!("TODO check status in a moment (instead of breaking here)");
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    },
+                                    Err(err) => {
+                                        println!("Couldn't parse response: {:?}", err);
+                                    }
+                                }
+                            },
+                            Err(err) => {
+                                println!("Couldn't get distance: {:?}", err);
+                            },
+                        }
 
                         welcome_vars.insert(String::from("city"), &current_city.city);
                         println!("{}", strfmt(
