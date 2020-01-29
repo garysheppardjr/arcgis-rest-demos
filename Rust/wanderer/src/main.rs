@@ -61,7 +61,7 @@ struct City {
     admin_name: String,
     //#[serde(default)]
     population: u32,
-    #[serde(rename = "FID")]
+    #[serde(alias = "FID", alias = "ORIG_FID")]
     fid: u32,
 }
 
@@ -74,6 +74,17 @@ struct CityFeature {
 #[derive(Deserialize)]
 struct QueryResponse {
     features: Vec<CityFeature>,
+}
+
+#[derive(Deserialize)]
+struct NearestLayerValue {
+    #[serde(rename = "featureSet")]
+    feature_set: QueryResponse,
+}
+
+#[derive(Deserialize)]
+struct NearestLayerResponse {
+    value: NearestLayerValue,
 }
 
 async fn login(client: &reqwest::Client, username: &String, password: &String, referrer: &String) -> Result<Response> {
@@ -370,6 +381,35 @@ async fn get_job_status(client: &reqwest::Client, token: &String, referrer: &Str
     }
 }
 
+async fn get_next_city(client: &reqwest::Client, token: &String, referrer: &String, portal_self: &PortalSelf, job_id: &String) -> Result<City> {
+    println!("Job ID is {}", job_id);
+    match client.get(format!("{}/FindNearest/jobs/{}/results/nearestLayer", &portal_self.helper_services.analysis.url, job_id).as_str())
+    .query(&[
+        ("token", token),
+        ("referer", referrer),
+        ("f", &String::from("json")),
+    ]).send().await {
+        Ok(result) => {
+            match result.json().await {
+                Ok(response) => {
+                    let mut response: NearestLayerResponse = response;
+                    let city: City = response.value.feature_set.features.remove(0).city;
+                    println!("Job result says {}", city.city);
+                    Ok(city)
+                },
+                Err(err) => {
+                    println!("Problem with job result string: {:?}", err);
+                    Err(err)
+                }
+            }
+        },
+        Err(err) => {
+            println!("Could not get job result: {:?}", err);
+            Err(err)
+        }
+    }
+}
+
 async fn play_game(client: &reqwest::Client, token: &String, referrer: &String, city_count: u32) {
     println!("Let's play Wanderer with {} cities", city_count);
     
@@ -454,7 +494,8 @@ async fn play_game(client: &reqwest::Client, token: &String, referrer: &String, 
                         
                         let mut analysis_layer = json::JsonValue::new_object();
                         analysis_layer["url"] = FEATURE_LAYER_URL.into();
-                        analysis_layer["filter"] = format!("population >= {}", minimum_population).into();
+                        analysis_layer["filter"] = format!("population >= {} AND FID <> {}", minimum_population, current_city.fid).into();
+                        println!("Filter is this: {}", analysis_layer["filter"]);
                         let mut near_layer = json::JsonValue::new_object();
                         near_layer["url"] = FEATURE_LAYER_URL.into();
                         near_layer["filter"] = format!("FID = {}", current_city.fid).into();
@@ -481,10 +522,13 @@ async fn play_game(client: &reqwest::Client, token: &String, referrer: &String, 
                                         let response_json = json::parse(response_string.as_str()).unwrap();
                                         let mut status = String::from(response_json["jobStatus"].as_str().unwrap());
                                         let job_id = String::from(response_json["jobId"].as_str().unwrap());
+                                        println!("Waiting for job {}", job_id);
                                         loop {
                                             match status.as_str() {
                                                 "esriJobSucceeded" => {
-                                                    println!("Yay! It worked! We get to keep playing! TODO move current_city");
+                                                    let city = get_next_city(client, token, referrer, &portal_self, &job_id).await.unwrap();
+                                                    let current_city = &city;
+                                                    println!("The next city is {}", city.city);
                                                     break;
                                                 },
                                                 "esriJobFailed" | "esriJobTimedOut" | "esriJobCancelled" => {
@@ -492,10 +536,9 @@ async fn play_game(client: &reqwest::Client, token: &String, referrer: &String, 
                                                     break;
                                                 },
                                                 _ => {
-                                                    println!("Sit tight...{}", status);
                                                     thread::sleep(time::Duration::from_millis(5000));
                                                     status = get_job_status(client, token, referrer, &portal_self, &job_id).await;
-                                                    println!("New status is {}", status);
+                                                    println!("{}", status);
                                                 }
                                             };
                                         }
