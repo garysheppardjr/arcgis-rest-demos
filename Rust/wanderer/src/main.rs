@@ -7,6 +7,7 @@ extern crate strfmt;
 use geo::Point;
 use geo::algorithm::bearing::Bearing;
 use rand::Rng;
+use reqwest::header::CACHE_CONTROL;
 use reqwest::RequestBuilder;
 use reqwest::Response;
 use reqwest::Result;
@@ -14,6 +15,7 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::io;
+use std::{thread, time};
 use strfmt::strfmt;
 use uuid::Uuid;
 
@@ -341,6 +343,33 @@ async fn get_distance(client: &reqwest::Client, token: &String, referrer: &Strin
     }
 }
 
+async fn get_job_status(client: &reqwest::Client, token: &String, referrer: &String, portal_self: &PortalSelf, job_id: &String) -> String {
+    match client.get(format!("{}/FindNearest/jobs/{}", &portal_self.helper_services.analysis.url, job_id).as_str())
+    .header(CACHE_CONTROL, "no-cache")
+    .query(&[
+        ("token", token),
+        ("referer", referrer),
+        ("f", &String::from("json")),
+    ]).send().await {
+        Ok(job_result) => {
+            match job_result.text().await {
+                Ok(job_result_string) => {
+                    let json_result = json::parse(job_result_string.as_str()).unwrap();
+                    json_result["jobStatus"].as_str().unwrap().to_string()
+                },
+                Err(err) => {
+                    println!("Problem with job result string: {:?}", err);
+                    "unknown status".to_string()
+                }
+            }
+        },
+        Err(err) => {
+            println!("Could not get job result: {:?}", err);
+            "unknown status".to_string()
+        }
+    }
+}
+
 async fn play_game(client: &reqwest::Client, token: &String, referrer: &String, city_count: u32) {
     println!("Let's play Wanderer with {} cities", city_count);
     
@@ -367,7 +396,7 @@ async fn play_game(client: &reqwest::Client, token: &String, referrer: &String, 
                 &welcome_vars
             ).unwrap());
             
-            while true {
+            loop {
                 println!("You are now {:.0}km from your destination.", distance_to_target);
                 println!("What's next, Wanderer? (n, s, e, w, info)");
                 let mut cmd = String::new();
@@ -396,13 +425,21 @@ async fn play_game(client: &reqwest::Client, token: &String, referrer: &String, 
                                 extent["ymax"] = current_city.lat.into();
                             },
                             "e" => {
+                                let mut xmax = current_city.lng + 180.;
+                                if xmax > 180. {
+                                    xmax -= 360.;
+                                }
                                 extent["xmin"] = current_city.lng.into();
                                 extent["ymin"] = (-89.99999).into();
-                                extent["xmax"] = (179.99999).into();
+                                extent["xmax"] = xmax.into();
                                 extent["ymax"] = (89.99999).into();
                             },
                             "w" => {
-                                extent["xmin"] = (-179.99999).into();
+                                let mut xmin = current_city.lng - 180.;
+                                if xmin < -180. {
+                                    xmin -= 360.;
+                                }
+                                extent["xmin"] = xmin.into();
                                 extent["ymin"] = (-89.99999).into();
                                 extent["xmax"] = current_city.lng.into();
                                 extent["ymax"] = (89.99999).into();
@@ -442,11 +479,10 @@ async fn play_game(client: &reqwest::Client, token: &String, referrer: &String, 
                                 match response_result {
                                     Ok(response_string) => {
                                         let response_json = json::parse(response_string.as_str()).unwrap();
-                                        println!("Job ID is {}", response_json["jobId"]);
-                                        println!("Job status is {}", response_json["jobStatus"]);
-                                        let mut status = response_json["jobStatus"].as_str().unwrap();
+                                        let mut status = String::from(response_json["jobStatus"].as_str().unwrap());
+                                        let job_id = String::from(response_json["jobId"].as_str().unwrap());
                                         loop {
-                                            match status {
+                                            match status.as_str() {
                                                 "esriJobSucceeded" => {
                                                     println!("Yay! It worked! We get to keep playing! TODO move current_city");
                                                     break;
@@ -457,10 +493,11 @@ async fn play_game(client: &reqwest::Client, token: &String, referrer: &String, 
                                                 },
                                                 _ => {
                                                     println!("Sit tight...{}", status);
-                                                    println!("TODO check status in a moment (instead of breaking here)");
-                                                    break;
+                                                    thread::sleep(time::Duration::from_millis(5000));
+                                                    status = get_job_status(client, token, referrer, &portal_self, &job_id).await;
+                                                    println!("New status is {}", status);
                                                 }
-                                            }
+                                            };
                                         }
                                     },
                                     Err(err) => {
