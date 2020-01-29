@@ -1,8 +1,11 @@
+extern crate geo;
 extern crate json;
 extern crate rand;
 extern crate rpassword;
 extern crate strfmt;
 
+use geo::Point;
+use geo::algorithm::bearing::Bearing;
 use rand::Rng;
 use reqwest::RequestBuilder;
 use reqwest::Response;
@@ -50,8 +53,8 @@ struct PortalSelf {
 #[derive(Deserialize)]
 struct City {
     city: String,
-    lat: f32,
-    lng: f32,
+    lat: f64,
+    lng: f64,
     country: String,
     admin_name: String,
     //#[serde(default)]
@@ -289,7 +292,7 @@ async fn get_random_city_pair(client: &reqwest::Client, token: &String, referrer
     }
 }
 
-fn point_geometry(x: f32, y: f32) -> json::JsonValue {
+fn point_geometry(x: f64, y: f64) -> json::JsonValue {
     let mut data = json::JsonValue::new_object();
     data["geometryType"] = "esriGeometryPoint".into();
     data["geometry"] = json::JsonValue::new_object().into();
@@ -298,7 +301,7 @@ fn point_geometry(x: f32, y: f32) -> json::JsonValue {
     data
 }
 
-async fn get_distance(client: &reqwest::Client, token: &String, referrer: &String, portal_self: &PortalSelf, cities: &(&City, &City)) -> f32 {
+async fn get_distance(client: &reqwest::Client, token: &String, referrer: &String, portal_self: &PortalSelf, cities: &(&City, &City)) -> f64 {
     let f_json = String::from("json");
     let mut result: Result<Response> = client.get(format!("{}/distance", &portal_self.helper_services.geometry.url).as_str())
         .query(&[
@@ -317,11 +320,11 @@ async fn get_distance(client: &reqwest::Client, token: &String, referrer: &Strin
             match response_result {
                 Ok(response_string) => {
                     match json::parse(response_string.as_str())
-                        .unwrap()["distance"].as_f32() {
+                        .unwrap()["distance"].as_f64() {
                         Some(distance) => distance,
                         None => {
                             println!("Distance is null (this should never happen)");
-                            std::f32::MAX
+                            std::f64::MAX
                         },
                     }
                 },
@@ -354,7 +357,7 @@ async fn play_game(client: &reqwest::Client, token: &String, referrer: &String, 
             println!("Hey, Wanderer! Let's see if you can make it to the secret destination.");
             let mut current_city: &City = &cities.0;
             let target_city: &City = &cities.1;
-            let mut distance_to_target: f32 = get_distance(client, token, referrer, &portal_self, &(current_city, target_city)).await;
+            let mut distance_to_target: f64 = get_distance(client, token, referrer, &portal_self, &(current_city, target_city)).await;
             let mut rng = rand::thread_rng();
             let mut welcome_vars = HashMap::new();
             
@@ -383,7 +386,17 @@ async fn play_game(client: &reqwest::Client, token: &String, referrer: &String, 
                         ).unwrap());
                     },
                     "info" => {
-                        println!("So you want more info");
+                        println!("Current location: {}, {}, {}",
+                            &current_city.city, &current_city.admin_name, &current_city.country);
+                        let mut bearing = Point::<f64>::new(current_city.lng, current_city.lat)
+                            .bearing(Point::<f64>::new(target_city.lng, target_city.lat));
+                        while bearing > 360.0 {
+                            bearing -= 360.0;
+                        }
+                        while bearing < 0.0 {
+                            bearing += 360.0;
+                        }
+                        println!("Your destination is {:.0}km away at a bearing of {:.0} degrees.", distance_to_target, bearing);
                     },
                     _ => {
                         println!("I don't know how to {}", cmd);
