@@ -485,6 +485,48 @@ async fn get_next_city(
     }
 }
 
+fn directional_extent(city: &City, direction: &str) -> json::JsonValue {
+    let mut extent = json::JsonValue::new_object();
+    extent["spatialReference"] = json::JsonValue::new_object().into();
+    extent["spatialReference"]["wkid"] = 4326.into();
+    match direction {
+        "n" => {
+            extent["xmin"] = (-179.99999).into();
+            extent["ymin"] = city.lat.into();
+            extent["xmax"] = (179.99999).into();
+            extent["ymax"] = (89.99999).into();
+        }
+        "s" => {
+            extent["xmin"] = (-179.99999).into();
+            extent["ymin"] = (-89.99999).into();
+            extent["xmax"] = (179.99999).into();
+            extent["ymax"] = city.lat.into();
+        }
+        "e" => {
+            let mut xmax = city.lng + 180.;
+            if xmax > 180. {
+                xmax -= 360.;
+            }
+            extent["xmin"] = city.lng.into();
+            extent["ymin"] = (-89.99999).into();
+            extent["xmax"] = xmax.into();
+            extent["ymax"] = (89.99999).into();
+        }
+        "w" => {
+            let mut xmin = city.lng - 180.;
+            if xmin < -180. {
+                xmin -= 360.;
+            }
+            extent["xmin"] = xmin.into();
+            extent["ymin"] = (-89.99999).into();
+            extent["xmax"] = city.lng.into();
+            extent["ymax"] = (89.99999).into();
+        }
+        _ => {}
+    };
+    extent
+}
+
 async fn play_game(client: &reqwest::Client, token: &String, referrer: &String, city_count: u32) {
     println!("Let's play Wanderer with {} cities", city_count);
     // We need the portal self for its URLs
@@ -533,44 +575,7 @@ async fn play_game(client: &reqwest::Client, token: &String, referrer: &String, 
                 match cmd {
                     "n" | "s" | "e" | "w" => {
                         println!("You decide to travel {}.", cmd);
-                        let mut extent = json::JsonValue::new_object();
-                        extent["spatialReference"] = json::JsonValue::new_object().into();
-                        extent["spatialReference"]["wkid"] = 4326.into();
-                        match cmd {
-                            "n" => {
-                                extent["xmin"] = (-179.99999).into();
-                                extent["ymin"] = current_city.lat.into();
-                                extent["xmax"] = (179.99999).into();
-                                extent["ymax"] = (89.99999).into();
-                            }
-                            "s" => {
-                                extent["xmin"] = (-179.99999).into();
-                                extent["ymin"] = (-89.99999).into();
-                                extent["xmax"] = (179.99999).into();
-                                extent["ymax"] = current_city.lat.into();
-                            }
-                            "e" => {
-                                let mut xmax = current_city.lng + 180.;
-                                if xmax > 180. {
-                                    xmax -= 360.;
-                                }
-                                extent["xmin"] = current_city.lng.into();
-                                extent["ymin"] = (-89.99999).into();
-                                extent["xmax"] = xmax.into();
-                                extent["ymax"] = (89.99999).into();
-                            }
-                            "w" => {
-                                let mut xmin = current_city.lng - 180.;
-                                if xmin < -180. {
-                                    xmin -= 360.;
-                                }
-                                extent["xmin"] = xmin.into();
-                                extent["ymin"] = (-89.99999).into();
-                                extent["xmax"] = current_city.lng.into();
-                                extent["ymax"] = (89.99999).into();
-                            }
-                            _ => {}
-                        };
+                        let extent = directional_extent(&current_city, cmd);
                         let mut out_sr = json::JsonValue::new_object();
                         out_sr["wkid"] = 4326.into();
                         let mut context = json::JsonValue::new_object();
@@ -583,14 +588,9 @@ async fn play_game(client: &reqwest::Client, token: &String, referrer: &String, 
                             minimum_population, current_city.fid
                         )
                         .into();
-                        println!("Filter is this: {}", analysis_layer["filter"]);
                         let mut near_layer = json::JsonValue::new_object();
                         near_layer["url"] = FEATURE_LAYER_URL.into();
                         near_layer["filter"] = format!("FID = {}", current_city.fid).into();
-                        println!(
-                            "Posting request to {}",
-                            &portal_self.helper_services.analysis.url
-                        );
                         println!("Token is {}", token);
                         let mut result: Result<Response> = client
                             .post(
@@ -604,7 +604,7 @@ async fn play_game(client: &reqwest::Client, token: &String, referrer: &String, 
                                 ("analysisLayer", analysis_layer.dump().as_str()),
                                 ("nearLayer", near_layer.dump().as_str()),
                                 ("measurementType", "StraightLine"),
-                                ("maxCount", "1"),
+                                ("maxCount", "2"),
                                 ("context", context.dump().as_str()),
                                 ("token", token),
                                 ("referer", referrer),
