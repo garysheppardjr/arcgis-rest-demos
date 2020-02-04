@@ -4,8 +4,8 @@ extern crate rand;
 extern crate rpassword;
 extern crate strfmt;
 
-use geo::Point;
 use geo::algorithm::bearing::Bearing;
+use geo::Point;
 use rand::Rng;
 use reqwest::header::CACHE_CONTROL;
 use reqwest::RequestBuilder;
@@ -87,7 +87,12 @@ struct NearestLayerResponse {
     value: NearestLayerValue,
 }
 
-async fn login(client: &reqwest::Client, username: &String, password: &String, referrer: &String) -> Result<Response> {
+async fn login(
+    client: &reqwest::Client,
+    username: &String,
+    password: &String,
+    referrer: &String,
+) -> Result<Response> {
     let mut params = HashMap::new();
     let f_json = String::from("json");
     params.insert("username", username);
@@ -95,36 +100,37 @@ async fn login(client: &reqwest::Client, username: &String, password: &String, r
     params.insert("referer", referrer);
     params.insert("f", &f_json);
 
-    client.post("https://www.arcgis.com/sharing/rest/generateToken")
+    client
+        .post("https://www.arcgis.com/sharing/rest/generateToken")
         .form(&params)
         .send()
         .await
 }
 
-async fn get_portal_self(client: &reqwest::Client, token: &String, referrer: &String) -> Result<PortalSelf> {
+async fn get_portal_self(
+    client: &reqwest::Client,
+    token: &String,
+    referrer: &String,
+) -> Result<PortalSelf> {
     let f_json = String::from("json");
-    let mut result: Result<Response> = client.get("https://www.arcgis.com/sharing/rest/portals/self")
-        .query(&[
-            ("token", token),
-            ("referer", referrer),
-            ("f", &f_json),
-        ])
+    let mut result: Result<Response> = client
+        .get("https://www.arcgis.com/sharing/rest/portals/self")
+        .query(&[("token", token), ("referer", referrer), ("f", &f_json)])
         .send()
         .await;
     match result {
-        Ok(response) => {
-            response.json().await
-        },
+        Ok(response) => response.json().await,
         Err(err) => {
             println!("Couldn't get portal self: {:?}", err);
             Err(err)
-        },
+        }
     }
 }
 
 async fn get_cities_count(client: &reqwest::Client, token: &String, referrer: &String) -> u32 {
     let f_json = String::from("json");
-    let mut result: Result<Response> = client.get(format!("{}/query", FEATURE_LAYER_URL).as_str())
+    let mut result: Result<Response> = client
+        .get(format!("{}/query", FEATURE_LAYER_URL).as_str())
         .query(&[
             ("where", "population IS NOT NULL"),
             ("returnCountOnly", "true"),
@@ -139,31 +145,36 @@ async fn get_cities_count(client: &reqwest::Client, token: &String, referrer: &S
             let response_result: Result<String> = response.text().await;
             match response_result {
                 Ok(response_string) => {
-                    match json::parse(response_string.as_str())
-                        .unwrap()["count"].as_u32() {
+                    match json::parse(response_string.as_str()).unwrap()["count"].as_u32() {
                         Some(count) => count,
                         None => {
                             println!("Count is null (this should never happen)");
                             0
-                        },
+                        }
                     }
-                },
+                }
                 Err(err) => {
                     println!("Couldn't parse response: {:?}", err);
                     0
                 }
             }
-        },
+        }
         Err(err) => {
             println!("Couldn't get city count: {:?}", err);
             0
-        },
+        }
     }
 }
 
-async fn get_minimum_population(client: &reqwest::Client, token: &String, referrer: &String, city_count: u32) -> u32 {
+async fn get_minimum_population(
+    client: &reqwest::Client,
+    token: &String,
+    referrer: &String,
+    city_count: u32,
+) -> u32 {
     let f_json = String::from("json");
-    let mut result: Result<Response> = client.get(format!("{}/query", FEATURE_LAYER_URL).as_str())
+    let mut result: Result<Response> = client
+        .get(format!("{}/query", FEATURE_LAYER_URL).as_str())
         .query(&[
             ("outFields", "population"),
             ("where", "population IS NOT NULL"),
@@ -182,32 +193,40 @@ async fn get_minimum_population(client: &reqwest::Client, token: &String, referr
             let response_result: Result<String> = response.text().await;
             match response_result {
                 Ok(response_string) => {
-                    match json::parse(response_string.as_str())
-                        .unwrap()["features"][0]["attributes"]["population"].as_u32() {
+                    match json::parse(response_string.as_str()).unwrap()["features"][0]
+                        ["attributes"]["population"]
+                        .as_u32()
+                    {
                         Some(population) => population,
                         None => {
                             println!("Population is null (this should never happen)");
                             0
-                        },
+                        }
                     }
-                },
+                }
                 Err(err) => {
                     println!("Couldn't parse response: {:?}", err);
                     0
                 }
             }
-        },
+        }
         Err(err) => {
             println!("Couldn't get minimum population: {:?}", err);
             0
-        },
+        }
     }
 }
 
-async fn get_cities(client: &reqwest::Client, token: &String, referrer: &String, fids: Vec<u32>) -> Vec<CityFeature> {
+async fn get_cities(
+    client: &reqwest::Client,
+    token: &String,
+    referrer: &String,
+    fids: Vec<u32>,
+) -> Vec<CityFeature> {
     let f_json = String::from("json");
     let fid_strings: Vec<String> = fids.iter().map(ToString::to_string).collect();
-    let mut result: Result<Response> = client.get(format!("{}/query", FEATURE_LAYER_URL).as_str())
+    let mut result: Result<Response> = client
+        .get(format!("{}/query", FEATURE_LAYER_URL).as_str())
         .query(&[
             ("objectIds", &fid_strings.join(",")),
             ("outFields", &String::from("*")),
@@ -226,22 +245,33 @@ async fn get_cities(client: &reqwest::Client, token: &String, referrer: &String,
                 Err(err) => {
                     println!("Couldn't parse city query response: {:?}", err);
                     Vec::new()
-                },
+                }
             }
-        },
+        }
         Err(err) => {
             println!("Couldn't get query results: {:?}", err);
             Vec::new()
-        },
+        }
     }
 }
 
-async fn get_random_city_pair(client: &reqwest::Client, token: &String, referrer: &String, minimum_population: u32) -> Result<(City, City)> {
-    println!("Getting a random city pair with minimum population {}", minimum_population);
+async fn get_random_city_pair(
+    client: &reqwest::Client,
+    token: &String,
+    referrer: &String,
+    minimum_population: u32,
+) -> Result<(City, City)> {
+    println!(
+        "Getting a random city pair with minimum population {}",
+        minimum_population
+    );
     let f_json = String::from("json");
-    let mut result: Result<Response> = client.get(format!("{}/query", FEATURE_LAYER_URL).as_str())
+    let mut result: Result<Response> = client
+        .get(format!("{}/query", FEATURE_LAYER_URL).as_str())
         .query(&[
-            ("outStatistics", r#"
+            (
+                "outStatistics",
+                r#"
                 [
                     {
                         "statisticType": "max",
@@ -254,8 +284,12 @@ async fn get_random_city_pair(client: &reqwest::Client, token: &String, referrer
                         "outStatisticFieldName": "min_fid"
                     }
                 ]
-            "#),
-            ("where", format!("population >= {}", minimum_population).as_str()),
+            "#,
+            ),
+            (
+                "where",
+                format!("population >= {}", minimum_population).as_str(),
+            ),
             ("token", token),
             ("referer", referrer),
             ("f", &f_json),
@@ -271,7 +305,6 @@ async fn get_random_city_pair(client: &reqwest::Client, token: &String, referrer
                     let attributes = &json_value["features"][0]["attributes"];
                     let min_fid = attributes["min_fid"].as_u32().unwrap();
                     let max_fid = attributes["max_fid"].as_u32().unwrap();
-                    
                     let mut cities: Vec<City> = Vec::new();
                     let mut tried_fids = HashSet::new();
                     while 2 > cities.len() {
@@ -285,23 +318,25 @@ async fn get_random_city_pair(client: &reqwest::Client, token: &String, referrer
                         }
                         let city_results = get_cities(client, token, referrer, fids).await;
                         for city_feature in city_results {
-                            if 2 > cities.len() && city_feature.city.population >= minimum_population {
+                            if 2 > cities.len()
+                                && city_feature.city.population >= minimum_population
+                            {
                                 cities.push(city_feature.city);
                             }
                         }
-                    };
+                    }
                     Ok((cities.remove(0), cities.remove(0)))
-                },
+                }
                 Err(err) => {
                     println!("Couldn't parse statistics response: {:?}", err);
                     Err(err)
                 }
             }
-        },
+        }
         Err(err) => {
             println!("Couldn't get statistics: {:?}", err);
             Err(err)
-        },
+        }
     }
 }
 
@@ -314,12 +349,25 @@ fn point_geometry(x: f64, y: f64) -> json::JsonValue {
     data
 }
 
-async fn get_distance(client: &reqwest::Client, token: &String, referrer: &String, portal_self: &PortalSelf, cities: &(&City, &City)) -> f64 {
+async fn get_distance(
+    client: &reqwest::Client,
+    token: &String,
+    referrer: &String,
+    portal_self: &PortalSelf,
+    cities: &(&City, &City),
+) -> f64 {
     let f_json = String::from("json");
-    let mut result: Result<Response> = client.get(format!("{}/distance", &portal_self.helper_services.geometry.url).as_str())
+    let mut result: Result<Response> = client
+        .get(format!("{}/distance", &portal_self.helper_services.geometry.url).as_str())
         .query(&[
-            ("geometry1", point_geometry(cities.0.lng, cities.0.lat).dump().as_str()),
-            ("geometry2", point_geometry(cities.1.lng, cities.1.lat).dump().as_str()),
+            (
+                "geometry1",
+                point_geometry(cities.0.lng, cities.0.lat).dump().as_str(),
+            ),
+            (
+                "geometry2",
+                point_geometry(cities.1.lng, cities.1.lat).dump().as_str(),
+            ),
             ("sr", "4326"),
             ("distanceUnit", "9036"), // esriSRUnit_Kilometer
             ("geodesic", "true"),
@@ -332,46 +380,59 @@ async fn get_distance(client: &reqwest::Client, token: &String, referrer: &Strin
             let response_result: Result<String> = response.text().await;
             match response_result {
                 Ok(response_string) => {
-                    match json::parse(response_string.as_str())
-                        .unwrap()["distance"].as_f64() {
+                    match json::parse(response_string.as_str()).unwrap()["distance"].as_f64() {
                         Some(distance) => distance,
                         None => {
                             println!("Distance is null (this should never happen)");
                             std::f64::MAX
-                        },
+                        }
                     }
-                },
+                }
                 Err(err) => {
                     println!("Couldn't parse response: {:?}", err);
                     0.0
                 }
             }
-        },
+        }
         Err(err) => {
             println!("Couldn't get distance: {:?}", err);
             0.0
-        },
+        }
     }
 }
 
-async fn get_job_status(client: &reqwest::Client, token: &String, referrer: &String, portal_self: &PortalSelf, job_id: &String) -> String {
-    match client.get(format!("{}/FindNearest/jobs/{}", &portal_self.helper_services.analysis.url, job_id).as_str())
-    .header(CACHE_CONTROL, "no-cache")
-    .query(&[
-        ("token", token),
-        ("referer", referrer),
-        ("f", &String::from("json")),
-    ]).send().await {
-        Ok(job_result) => {
-            match job_result.text().await {
-                Ok(job_result_string) => {
-                    let json_result = json::parse(job_result_string.as_str()).unwrap();
-                    json_result["jobStatus"].as_str().unwrap().to_string()
-                },
-                Err(err) => {
-                    println!("Problem with job result string: {:?}", err);
-                    "unknown status".to_string()
-                }
+async fn get_job_status(
+    client: &reqwest::Client,
+    token: &String,
+    referrer: &String,
+    portal_self: &PortalSelf,
+    job_id: &String,
+) -> String {
+    match client
+        .get(
+            format!(
+                "{}/FindNearest/jobs/{}",
+                &portal_self.helper_services.analysis.url, job_id
+            )
+            .as_str(),
+        )
+        .header(CACHE_CONTROL, "no-cache")
+        .query(&[
+            ("token", token),
+            ("referer", referrer),
+            ("f", &String::from("json")),
+        ])
+        .send()
+        .await
+    {
+        Ok(job_result) => match job_result.text().await {
+            Ok(job_result_string) => {
+                let json_result = json::parse(job_result_string.as_str()).unwrap();
+                json_result["jobStatus"].as_str().unwrap().to_string()
+            }
+            Err(err) => {
+                println!("Problem with job result string: {:?}", err);
+                "unknown status".to_string()
             }
         },
         Err(err) => {
@@ -381,26 +442,40 @@ async fn get_job_status(client: &reqwest::Client, token: &String, referrer: &Str
     }
 }
 
-async fn get_next_city(client: &reqwest::Client, token: &String, referrer: &String, portal_self: &PortalSelf, job_id: &String) -> Result<City> {
+async fn get_next_city(
+    client: &reqwest::Client,
+    token: &String,
+    referrer: &String,
+    portal_self: &PortalSelf,
+    job_id: &String,
+) -> Result<City> {
     println!("Job ID is {}", job_id);
-    match client.get(format!("{}/FindNearest/jobs/{}/results/nearestLayer", &portal_self.helper_services.analysis.url, job_id).as_str())
-    .query(&[
-        ("token", token),
-        ("referer", referrer),
-        ("f", &String::from("json")),
-    ]).send().await {
-        Ok(result) => {
-            match result.json().await {
-                Ok(response) => {
-                    let mut response: NearestLayerResponse = response;
-                    let city: City = response.value.feature_set.features.remove(0).city;
-                    println!("Job result says {}", city.city);
-                    Ok(city)
-                },
-                Err(err) => {
-                    println!("Problem with job result string: {:?}", err);
-                    Err(err)
-                }
+    match client
+        .get(
+            format!(
+                "{}/FindNearest/jobs/{}/results/nearestLayer",
+                &portal_self.helper_services.analysis.url, job_id
+            )
+            .as_str(),
+        )
+        .query(&[
+            ("token", token),
+            ("referer", referrer),
+            ("f", &String::from("json")),
+        ])
+        .send()
+        .await
+    {
+        Ok(result) => match result.json().await {
+            Ok(response) => {
+                let mut response: NearestLayerResponse = response;
+                let city: City = response.value.feature_set.features.remove(0).city;
+                println!("Job result says {}", city.city);
+                Ok(city)
+            }
+            Err(err) => {
+                println!("Problem with job result string: {:?}", err);
+                Err(err)
             }
         },
         Err(err) => {
@@ -412,42 +487,52 @@ async fn get_next_city(client: &reqwest::Client, token: &String, referrer: &Stri
 
 async fn play_game(client: &reqwest::Client, token: &String, referrer: &String, city_count: u32) {
     println!("Let's play Wanderer with {} cities", city_count);
-    
     // We need the portal self for its URLs
     let portal_self = get_portal_self(client, token, referrer).await.unwrap();
 
     // Get the minimum population for cities in this game
     let minimum_population = get_minimum_population(client, token, referrer, city_count).await;
     println!("Minimum population: {}", minimum_population);
-    
     // Get a couple of random cities
     match get_random_city_pair(client, token, referrer, minimum_population).await {
         Ok(cities) => {
             println!("Hey, Wanderer! Let's see if you can make it to the secret destination.");
             let mut current_city: &City = &cities.0;
             let target_city: &City = &cities.1;
-            let mut distance_to_target: f64 = get_distance(client, token, referrer, &portal_self, &(current_city, target_city)).await;
+            let mut distance_to_target: f64 = get_distance(
+                client,
+                token,
+                referrer,
+                &portal_self,
+                &(current_city, target_city),
+            )
+            .await;
             let mut rng = rand::thread_rng();
             let mut welcome_vars = HashMap::new();
-            
             welcome_vars.insert(String::from("city"), &current_city.city);
-            println!("{}", strfmt(
-                WELCOME_MESSAGES[rng.gen_range(0, WELCOME_MESSAGES.len())],
-                &welcome_vars
-            ).unwrap());
-            
+            println!(
+                "{}",
+                strfmt(
+                    WELCOME_MESSAGES[rng.gen_range(0, WELCOME_MESSAGES.len())],
+                    &welcome_vars
+                )
+                .unwrap()
+            );
             loop {
-                println!("You are now {:.0}km from your destination.", distance_to_target);
+                println!(
+                    "You are now {:.0}km from your destination.",
+                    distance_to_target
+                );
                 println!("What's next, Wanderer? (n, s, e, w, info)");
                 let mut cmd = String::new();
-                io::stdin().read_line(&mut cmd)
+                io::stdin()
+                    .read_line(&mut cmd)
                     .expect("Failed to read command");
                 cmd = String::from(cmd.trim()).to_lowercase();
                 let cmd = cmd.as_str();
                 match cmd {
                     "n" | "s" | "e" | "w" => {
                         println!("You decide to travel {}.", cmd);
-                        
                         let mut extent = json::JsonValue::new_object();
                         extent["spatialReference"] = json::JsonValue::new_object().into();
                         extent["spatialReference"]["wkid"] = 4326.into();
@@ -457,13 +542,13 @@ async fn play_game(client: &reqwest::Client, token: &String, referrer: &String, 
                                 extent["ymin"] = current_city.lat.into();
                                 extent["xmax"] = (179.99999).into();
                                 extent["ymax"] = (89.99999).into();
-                            },
+                            }
                             "s" => {
                                 extent["xmin"] = (-179.99999).into();
                                 extent["ymin"] = (-89.99999).into();
                                 extent["xmax"] = (179.99999).into();
                                 extent["ymax"] = current_city.lat.into();
-                            },
+                            }
                             "e" => {
                                 let mut xmax = current_city.lng + 180.;
                                 if xmax > 180. {
@@ -473,7 +558,7 @@ async fn play_game(client: &reqwest::Client, token: &String, referrer: &String, 
                                 extent["ymin"] = (-89.99999).into();
                                 extent["xmax"] = xmax.into();
                                 extent["ymax"] = (89.99999).into();
-                            },
+                            }
                             "w" => {
                                 let mut xmin = current_city.lng - 180.;
                                 if xmin < -180. {
@@ -483,25 +568,38 @@ async fn play_game(client: &reqwest::Client, token: &String, referrer: &String, 
                                 extent["ymin"] = (-89.99999).into();
                                 extent["xmax"] = current_city.lng.into();
                                 extent["ymax"] = (89.99999).into();
-                            },
-                            _ => {},
+                            }
+                            _ => {}
                         };
                         let mut out_sr = json::JsonValue::new_object();
                         out_sr["wkid"] = 4326.into();
                         let mut context = json::JsonValue::new_object();
                         context["extent"] = extent.into();
                         context["outSR"] = out_sr.into();
-                        
                         let mut analysis_layer = json::JsonValue::new_object();
                         analysis_layer["url"] = FEATURE_LAYER_URL.into();
-                        analysis_layer["filter"] = format!("population >= {} AND FID <> {}", minimum_population, current_city.fid).into();
+                        analysis_layer["filter"] = format!(
+                            "population >= {} AND FID <> {}",
+                            minimum_population, current_city.fid
+                        )
+                        .into();
                         println!("Filter is this: {}", analysis_layer["filter"]);
                         let mut near_layer = json::JsonValue::new_object();
                         near_layer["url"] = FEATURE_LAYER_URL.into();
                         near_layer["filter"] = format!("FID = {}", current_city.fid).into();
-                        println!("Posting request to {}", &portal_self.helper_services.analysis.url);
+                        println!(
+                            "Posting request to {}",
+                            &portal_self.helper_services.analysis.url
+                        );
                         println!("Token is {}", token);
-                        let mut result: Result<Response> = client.post(format!("{}/FindNearest/submitJob", &portal_self.helper_services.analysis.url).as_str())
+                        let mut result: Result<Response> = client
+                            .post(
+                                format!(
+                                    "{}/FindNearest/submitJob",
+                                    &portal_self.helper_services.analysis.url
+                                )
+                                .as_str(),
+                            )
                             .form(&[
                                 ("analysisLayer", analysis_layer.dump().as_str()),
                                 ("nearLayer", near_layer.dump().as_str()),
@@ -519,49 +617,79 @@ async fn play_game(client: &reqwest::Client, token: &String, referrer: &String, 
                                 let response_result: Result<String> = response.text().await;
                                 match response_result {
                                     Ok(response_string) => {
-                                        let response_json = json::parse(response_string.as_str()).unwrap();
-                                        let mut status = String::from(response_json["jobStatus"].as_str().unwrap());
-                                        let job_id = String::from(response_json["jobId"].as_str().unwrap());
+                                        let response_json =
+                                            json::parse(response_string.as_str()).unwrap();
+                                        let mut status = String::from(
+                                            response_json["jobStatus"].as_str().unwrap(),
+                                        );
+                                        let job_id =
+                                            String::from(response_json["jobId"].as_str().unwrap());
                                         println!("Waiting for job {}", job_id);
                                         loop {
                                             match status.as_str() {
                                                 "esriJobSucceeded" => {
-                                                    let city = get_next_city(client, token, referrer, &portal_self, &job_id).await.unwrap();
+                                                    let city = get_next_city(
+                                                        client,
+                                                        token,
+                                                        referrer,
+                                                        &portal_self,
+                                                        &job_id,
+                                                    )
+                                                    .await
+                                                    .unwrap();
                                                     let current_city = &city;
                                                     println!("The next city is {}", city.city);
                                                     break;
-                                                },
-                                                "esriJobFailed" | "esriJobTimedOut" | "esriJobCancelled" => {
-                                                    println!("Could not move to a city at this time.");
+                                                }
+                                                "esriJobFailed" | "esriJobTimedOut"
+                                                | "esriJobCancelled" => {
+                                                    println!(
+                                                        "Could not move to a city at this time."
+                                                    );
                                                     break;
-                                                },
+                                                }
                                                 _ => {
-                                                    thread::sleep(time::Duration::from_millis(5000));
-                                                    status = get_job_status(client, token, referrer, &portal_self, &job_id).await;
+                                                    thread::sleep(time::Duration::from_millis(
+                                                        5000,
+                                                    ));
+                                                    status = get_job_status(
+                                                        client,
+                                                        token,
+                                                        referrer,
+                                                        &portal_self,
+                                                        &job_id,
+                                                    )
+                                                    .await;
                                                     println!("{}", status);
                                                 }
                                             };
                                         }
-                                    },
+                                    }
                                     Err(err) => {
                                         println!("Couldn't parse response: {:?}", err);
                                     }
                                 }
-                            },
+                            }
                             Err(err) => {
                                 println!("Couldn't get distance: {:?}", err);
-                            },
+                            }
                         }
 
                         welcome_vars.insert(String::from("city"), &current_city.city);
-                        println!("{}", strfmt(
-                            WELCOME_MESSAGES[rng.gen_range(0, WELCOME_MESSAGES.len())],
-                            &welcome_vars
-                        ).unwrap());
-                    },
+                        println!(
+                            "{}",
+                            strfmt(
+                                WELCOME_MESSAGES[rng.gen_range(0, WELCOME_MESSAGES.len())],
+                                &welcome_vars
+                            )
+                            .unwrap()
+                        );
+                    }
                     "info" => {
-                        println!("Current location: {}, {}, {}",
-                            &current_city.city, &current_city.admin_name, &current_city.country);
+                        println!(
+                            "Current location: {}, {}, {}",
+                            &current_city.city, &current_city.admin_name, &current_city.country
+                        );
                         let mut bearing = Point::<f64>::new(current_city.lng, current_city.lat)
                             .bearing(Point::<f64>::new(target_city.lng, target_city.lat));
                         while bearing > 360.0 {
@@ -570,14 +698,17 @@ async fn play_game(client: &reqwest::Client, token: &String, referrer: &String, 
                         while bearing < 0.0 {
                             bearing += 360.0;
                         }
-                        println!("Your destination is {:.0}km away at a bearing of {:.0} degrees.", distance_to_target, bearing);
-                    },
+                        println!(
+                            "Your destination is {:.0}km away at a bearing of {:.0} degrees.",
+                            distance_to_target, bearing
+                        );
+                    }
                     _ => {
                         println!("I don't know how to {}", cmd);
-                    },
+                    }
                 }
             }
-        },
+        }
         Err(err) => println!("No cities?! {}", err),
     }
 }
@@ -588,7 +719,8 @@ async fn main() {
     println!("Wanderer {}", VERSION);
     println!("ArcGIS Online username:");
     let mut username = String::new();
-    io::stdin().read_line(&mut username)
+    io::stdin()
+        .read_line(&mut username)
         .expect("Failed to read line");
     username = String::from(username.trim());
     let password = rpassword::read_password_from_tty(Some("Password: ")).unwrap();
@@ -600,34 +732,35 @@ async fn main() {
             let json_result: Result<TokenResponse> = response.json().await;
             match json_result {
                 Ok(json) => {
-                    println!("Level of difficulty (0 = easy, 1 = medium, 2 = hard, 3 = legendary):");
+                    println!(
+                        "Level of difficulty (0 = easy, 1 = medium, 2 = hard, 3 = legendary):"
+                    );
                     let mut difficulty = String::new();
-                    io::stdin().read_line(&mut difficulty)
+                    io::stdin()
+                        .read_line(&mut difficulty)
                         .expect("Failed to read line");
                     let difficulty: u32 = match difficulty.trim().parse() {
                         Ok(num) => num,
                         Err(_) => {
                             println!("Okay, then you get the default of 0 = easy.");
                             0
-                        },
+                        }
                     };
                     let city_count: u32 = match difficulty {
                         0 => 10,
                         1 => 100,
                         2 => 1000,
-                        3 => {
-                            get_cities_count(&reqwest_client, &json.token, &referrer).await
-                        },
+                        3 => get_cities_count(&reqwest_client, &json.token, &referrer).await,
                         _ => {
                             println!("Okay, then you get the default of 0 = easy.");
                             10
-                        },
+                        }
                     };
                     play_game(&reqwest_client, &json.token, &referrer, city_count).await;
-                },
+                }
                 Err(err) => println!("error here: {:?}", err),
             }
-        },
+        }
         Err(err) => println!("error parsing response: {:?}", err),
     }
 }
