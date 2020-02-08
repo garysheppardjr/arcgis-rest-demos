@@ -6,9 +6,9 @@ extern crate strfmt;
 
 use geo::algorithm::bearing::Bearing;
 use geo::Point;
+use json::object;
 use rand::Rng;
 use reqwest::header::CACHE_CONTROL;
-use reqwest::RequestBuilder;
 use reqwest::Response;
 use reqwest::Result;
 use serde::Deserialize;
@@ -24,7 +24,7 @@ const FEATURE_LAYER_URL: &'static str = "https://services7.arcgis.com/iYTqAIgyDc
 const WELCOME_MESSAGES: &[&str] = &[
     "Though you've just arrived, you look around and immediately realize that you are in {city}.",
     "Something in the air tells you you've just arrived in {city}.",
-    "That scent seems so familiar. \"Ah yes,\" you tell yourself. \"This could only be {city}.\".",
+    "That rustic aroma seems so familiar. \"Ah yes,\" you tell yourself. \"This could only be {city}.\".",
     "The sunsets in {city} are so beautiful this time of year. If only you had time to linger.",
 ];
 
@@ -527,7 +527,66 @@ fn directional_extent(city: &City, direction: &str) -> json::JsonValue {
     extent
 }
 
-async fn play_game(client: &reqwest::Client, token: &String, referrer: &String, city_count: u32) {
+async fn create_game_item(
+    client: &reqwest::Client,
+    token: &String,
+    referrer: &String,
+    username: &String,
+    cities_visited: &[&City]
+) -> Option<String> {
+    let mut params = HashMap::new();
+    params.insert("token", token.as_str());
+    params.insert("referer", referrer.as_str());
+    params.insert("f", "json");
+    params.insert("type", "Color Set");
+    params.insert("typeKeywords", "Wanderer game");
+    params.insert("title", "Wanderer Game 42");
+    let city_ids: Vec<u32> = cities_visited.iter().map(|city| city.fid).collect();
+    let text = json::stringify(object!{
+        "cities_visited" => city_ids
+    });
+    params.insert("text", text.as_str());
+
+    let result = client
+        .post(format!("https://www.arcgis.com/sharing/rest/content/users/{}/addItem", &username).as_str())
+        .form(&params)
+        .send()
+        .await;
+    match result {
+        Ok(response) => {
+            let response_result: Result<String> = response.text().await;
+            match response_result {
+                Ok(response_string) => {
+                    println!("response string is {}", response_string.as_str());
+                    let response_json = json::parse(response_string.as_str()).unwrap();
+                    match response_json["success"].as_bool() {
+                        Some(success) => {
+                            if success {
+                                Some(String::from(response_json["id"].as_str().unwrap()))
+                            } else {
+                                None
+                            }
+                        },
+                        None => {
+                            println!("Could not add item. No 'success' value in response.");
+                            None
+                        }
+                    }
+                },
+                Err(err) => {
+                    println!("Could not add item: {}", err);
+                    None
+                }
+            }
+        },
+        Err(err) => {
+            println!("Could not add item: {}", err);
+            None
+        }
+    }
+}
+
+async fn play_game(client: &reqwest::Client, token: &String, referrer: &String, username: &String, city_count: u32) {
     println!("Let's play Wanderer with {} cities", city_count);
     // We need the portal self for its URLs
     let portal_self = get_portal_self(client, token, referrer).await.unwrap();
@@ -541,6 +600,16 @@ async fn play_game(client: &reqwest::Client, token: &String, referrer: &String, 
             println!("Hey, Wanderer! Let's see if you can make it to the secret destination.");
             let mut current_city: &City = &cities.0;
             let target_city: &City = &cities.1;
+
+            match create_game_item(client, token, referrer, username, &[current_city]).await {
+                Some(id) => {
+                    println!("Successfully created game item {}", id);
+                },
+                None => {
+                    println!("Failed to create game item");    
+                }
+            }
+
             let mut distance_to_target: f64 = get_distance(
                 client,
                 token,
@@ -756,7 +825,8 @@ async fn main() {
                             10
                         }
                     };
-                    play_game(&reqwest_client, &json.token, &referrer, city_count).await;
+
+                    play_game(&reqwest_client, &json.token, &referrer, &username, city_count).await;
                 }
                 Err(err) => println!("error here: {:?}", err),
             }
