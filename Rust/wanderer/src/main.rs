@@ -15,6 +15,7 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::io;
+use std::io::{Error, ErrorKind};
 use std::{thread, time};
 use strfmt::strfmt;
 use uuid::Uuid;
@@ -448,7 +449,8 @@ async fn get_next_city(
     referrer: &String,
     portal_self: &PortalSelf,
     job_id: &String,
-) -> Result<City> {
+    current_city_id: u32
+) -> std::result::Result<City, Error> {
     println!("Job ID is {}", job_id);
     match client
         .get(
@@ -468,19 +470,27 @@ async fn get_next_city(
     {
         Ok(result) => match result.json().await {
             Ok(response) => {
-                let mut response: NearestLayerResponse = response;
-                let city: City = response.value.feature_set.features.remove(0).city;
-                println!("Job result says {}", city.city);
-                Ok(city)
-            }
+                let response: NearestLayerResponse = response;
+                let mut features: Vec<CityFeature> = response.value.feature_set.features;
+                let mut ret = Err(Error::new(ErrorKind::NotFound, format!("Near Features did not find any cities near city {}", current_city_id)));
+                while !features.is_empty() {
+                    let city: City = features.remove(0).city;
+                    if city.fid != current_city_id {
+                        println!("Job result says {}", city.city);
+                        ret = Ok(city);
+                        break;
+                    }
+                }
+                ret
+            },
             Err(err) => {
                 println!("Problem with job result string: {:?}", err);
-                Err(err)
+                Err(Error::new(ErrorKind::Other, format!("Problem with job result string: {:?}", err)))
             }
         },
         Err(err) => {
             println!("Could not get job result: {:?}", err);
-            Err(err)
+            Err(Error::new(ErrorKind::Other, format!("Could not get job result: {:?}", err)))
         }
     }
 }
@@ -697,17 +707,20 @@ async fn play_game(client: &reqwest::Client, token: &String, referrer: &String, 
                                         loop {
                                             match status.as_str() {
                                                 "esriJobSucceeded" => {
-                                                    let city = get_next_city(
+                                                    let next_city_result = get_next_city(
                                                         client,
                                                         token,
                                                         referrer,
                                                         &portal_self,
                                                         &job_id,
-                                                    )
-                                                    .await
-                                                    .unwrap();
-                                                    let current_city = &city;
-                                                    println!("The next city is {}", city.city);
+                                                        current_city.fid
+                                                    ).await;
+                                                    if next_city_result.is_ok() {
+                                                        let current_city = next_city_result.unwrap();
+                                                        println!("The next city is {}", current_city.city);
+                                                    } else {
+                                                        println!("Could not get next city: {:?}", next_city_result.err());
+                                                    }
                                                     break;
                                                 }
                                                 "esriJobFailed" | "esriJobTimedOut"
