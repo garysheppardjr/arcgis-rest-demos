@@ -64,16 +64,10 @@ async fn login(
     match client.post("https://www.arcgis.com/sharing/rest/generateToken").form(&params).send().await {
         Ok(response) => {
             match response.text().await {
-                Ok(text) => {
-                    Ok(json::parse(text.as_str()).unwrap())
-                },
-                Err(err) => {
-                    Err(Box::new(err))
-                }
+                Ok(text) => Ok(json::parse(text.as_str()).unwrap()),
+                Err(err) => Err(Box::new(err)),
             }
         },
-        Err(err) => {
-            Err(Box::new(err))
-        },
+        Err(err) => Err(Box::new(err)),
     }
 }
