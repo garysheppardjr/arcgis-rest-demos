@@ -52,15 +52,6 @@ async fn main() {
     read_from_console("Type Enter to exit");
 }
 
-fn read_from_console(prompt: &str) -> String {
-    println!("{}", prompt);
-    let mut value = String::new();
-    io::stdin()
-        .read_line(&mut value)
-        .expect("Failed to read line");
-    String::from(value.trim())
-}
-
 async fn add_features(
     client: &reqwest::Client,
     features: Array
@@ -81,4 +72,13 @@ async fn add_features(
         },
         Err(err) => Err(Box::new(err)),
     }
+}
+
+fn read_from_console(prompt: &str) -> String {
+    println!("{}", prompt);
+    let mut value = String::new();
+    io::stdin()
+        .read_line(&mut value)
+        .expect("Failed to read line");
+    String::from(value.trim())
 }
