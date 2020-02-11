@@ -49,11 +49,7 @@ async fn main() {
         }
     }
 
-    println!("Type Enter to exit");
-    let mut exit = String::new();
-    io::stdin()
-        .read_line(&mut exit)
-        .expect("Failed to read line");
+    read_from_console("Type Enter to exit");
 }
 
 fn read_from_console(prompt: &str) -> String {
