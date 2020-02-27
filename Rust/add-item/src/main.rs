@@ -12,6 +12,9 @@ use uuid::Uuid;
 
 type BoxResult<T> = Result<T,Box<dyn Error>>;
 
+const PORTAL_ROOT_URL: &str = "https://www.arcgis.com";
+// const PORTAL_ROOT_URL: &str = "https://host.domain.com/portal-web-adaptor";
+
 #[tokio::main]
 async fn main() {
     println!("Add Item Demo");
@@ -46,8 +49,8 @@ async fn main() {
                                 } else if add_item_response["success"].as_bool().unwrap_or(false) {
                                     println!("Success!");
                                     println!("Item page: https://www.arcgis.com/home/item.html?id={}", add_item_response["id"]);
-                                    println!("Item JSON: https://www.arcgis.com/sharing/rest/content/items/{}?f=json&token={}", add_item_response["id"], token);
-                                    println!("Item data JSON: https://www.arcgis.com/sharing/rest/content/items/{}/data?f=json&token={}", add_item_response["id"], token);
+                                    println!("Item JSON: {}/sharing/rest/content/items/{}?f=json&token={}", PORTAL_ROOT_URL, add_item_response["id"], token);
+                                    println!("Item data JSON: {}/sharing/rest/content/items/{}/data?f=json&token={}", PORTAL_ROOT_URL, add_item_response["id"], token);
                                 } else {
                                     println!("Failed to create item. Cause unknown. ☹");
                                 }
@@ -96,7 +99,7 @@ async fn add_item(
     });
     params.insert("text", &text);
 
-    let add_item_url = format!("https://www.arcgis.com/sharing/rest/content/users/{}/addItem", username);
+    let add_item_url = format!("{}/sharing/rest/content/users/{}/addItem", PORTAL_ROOT_URL, username);
     match client.post(add_item_url.as_str()).form(&params).send().await {
         Ok(response) => {
             match response.text().await {
@@ -121,7 +124,7 @@ async fn login(
     params.insert("referer", referrer);
     params.insert("f", &f_json);
 
-    match client.post("https://www.arcgis.com/sharing/rest/generateToken").form(&params).send().await {
+    match client.post(format!("{}/sharing/rest/generateToken", PORTAL_ROOT_URL).as_str()).form(&params).send().await {
         Ok(response) => {
             match response.text().await {
                 Ok(text) => Ok(json::parse(text.as_str()).unwrap()),
