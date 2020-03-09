@@ -34,7 +34,7 @@ type BoxResult<T> = Result<T,Box<dyn Error>>;
 /// 
 /// ```
 /// let reqwest_client = reqwest::Client::new();
-/// let login_result: Result<T,Box<dyn Error>> = login(&reqwest_client, &username, &password, &referrer).await;
+/// let login_result: Result<T,Box<dyn Error>> = quarenta::login(&reqwest_client, &username, &password, &referrer).await;
 /// match login_result {
 ///    Ok(token_response) => {
 ///        match token_response["token"].as_str() {
