@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::error::Error;
 use std::io;
 use std::result::Result;
@@ -22,7 +21,7 @@ async fn main() {
     let password = rpassword::read_password_from_tty(Some("Password: ")).unwrap();
 
     let reqwest_client = reqwest::Client::new();
-    let login_result: BoxResult<JsonValue> = login(&reqwest_client, &username, &password, &referrer).await;
+    let login_result: BoxResult<JsonValue> = quarenta::login(&reqwest_client, &username, &password, &referrer).await;
     match login_result {
         Ok(token_response) => {
             match token_response["token"].as_str() {
@@ -46,28 +45,4 @@ async fn main() {
     io::stdin()
         .read_line(&mut exit)
         .expect("Failed to read line");
-}
-
-async fn login(
-    client: &reqwest::Client,
-    username: &String,
-    password: &String,
-    referrer: &String,
-) -> BoxResult<JsonValue> {
-    let mut params = HashMap::new();
-    let f_json = String::from("json");
-    params.insert("username", username);
-    params.insert("password", password);
-    params.insert("referer", referrer);
-    params.insert("f", &f_json);
-
-    match client.post("https://www.arcgis.com/sharing/rest/generateToken").form(&params).send().await {
-        Ok(response) => {
-            match response.text().await {
-                Ok(text) => Ok(json::parse(text.as_str()).unwrap()),
-                Err(err) => Err(Box::new(err)),
-            }
-        },
-        Err(err) => Err(Box::new(err)),
-    }
 }

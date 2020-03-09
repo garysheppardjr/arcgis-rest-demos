@@ -9,6 +9,7 @@ edition = "2018"
 [dependencies]
 geo = "0.12.2"
 json = "0.12.1"
+quarenta = "0.1.0"
 rand = "0.7.3"
 reqwest = { version = "0.10", features = ["json"] }
 rpassword = "4.0.3"
