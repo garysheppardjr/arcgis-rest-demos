@@ -1,4 +1,5 @@
 extern crate geo;
+#[macro_use]
 extern crate json;
 extern crate rand;
 extern crate rpassword;
@@ -549,7 +550,8 @@ async fn create_game_item(
     params.insert("referer", referrer.as_str());
     params.insert("f", "json");
     params.insert("type", "Color Set");
-    params.insert("typeKeywords", "Wanderer game");
+    let keywords_string = json::stringify(array!["Wanderer game"]);
+    params.insert("typeKeywords", keywords_string.as_str());
     params.insert("title", "Wanderer Game 42");
     let city_ids: Vec<u32> = cities_visited.iter().map(|city| city.fid).collect();
     let text = json::stringify(object!{
